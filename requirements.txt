@@ -1,0 +1,12 @@
+ultralytics>=8.3.0
+opencv-python
+supervision>=0.30,<0.31   # 0.31 moved ByteTrack out into a separate package
+fastapi                   # includes pydantic (event validation)
+uvicorn
+httpx
+numpy
+pandas
+matplotlib
+onnx                      # needed by model.export(format="onnx")
+onnxruntime
+streamlit

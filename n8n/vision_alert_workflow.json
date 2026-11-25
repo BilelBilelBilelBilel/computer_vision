@@ -1,0 +1,177 @@
+{
+  "name": "Vision alert - verification gate",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vision-alert",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "67657f16-7e1a-4af6-b027-529b51b23e75",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "9de6c6bb-2a07-4a22-9af7-5704a333b9fe"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verification gate: accept the alert only if it is complete and consistent.\nconst body = $input.first().json.body || {};\nconst ids = Array.isArray(body.track_ids) ? body.track_ids : [];\nconst reasons = [];\n\nif (!body.image_base64) reasons.push('image missing');\nif (typeof body.count !== 'number') reasons.push('count missing');\nif (body.alert_type === 'zone_occupancy') {\n  // deterministic ByteTrack count: the count must be exactly the list of IDs\n  if (body.count !== ids.length) reasons.push(`count ${body.count} != ${ids.length} track_ids`);\n  if (body.count < body.threshold) reasons.push('count below threshold');\n  if ((body.sustained_frames || 0) < (body.sustain_required_frames || 1)) reasons.push('rule not sustained');\n} else if (body.alert_type === 'stockout') {\n  if (body.count >= body.threshold) reasons.push('stock is not below the minimum');\n} else {\n  reasons.push(`unknown alert_type: ${body.alert_type}`);\n}\n\nconst verified = reasons.length === 0;\nconst fileName = `${body.alert_type || 'alert'}_${String(body.timestamp || Date.now()).replace(/[^0-9]/g, '').slice(0, 17)}.jpg`;\nconst message = body.alert_type === 'stockout'\n  ? `Rupture de stock - ${body.zone} : ${body.count} produit(s), minimum ${body.threshold}`\n  : `Affluence - ${body.zone} : ${body.count} personnes (IDs ${ids.join(', ')}), seuil ${body.threshold}, maintenu ${body.sustained_frames} images`;\n\nconst item = {\n  json: {\n    verified, reasons, message, file_name: fileName,\n    alert_type: body.alert_type, zone: body.zone, count: body.count, track_ids: ids,\n    timestamp: body.timestamp, image_sha256: body.image_sha256,\n  },\n};\nif (body.image_base64) {\n  const buffer = Buffer.from(body.image_base64, 'base64');\n  try {\n    item.binary = { image: await this.helpers.prepareBinaryData(buffer, fileName, 'image/jpeg') };\n  } catch (e) {\n    item.binary = { image: { data: body.image_base64, mimeType: 'image/jpeg', fileName, fileExtension: 'jpg' } };\n  }\n}\nreturn [item];\n"
+      },
+      "id": "dab86dac-880d-4eb8-bd0d-2639ae3dcb57",
+      "name": "Verification gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "688e8d9f-098a-4432-89a3-dde6b179eaff",
+              "leftValue": "={{ $json.verified }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9aa8a4fb-9935-41dc-9056-865c93aaa5c3",
+      "name": "Verified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $json.file_name }}",
+        "dataPropertyName": "image",
+        "options": {}
+      },
+      "id": "66c43c28-b6e1-4137-ba86-02341654e079",
+      "name": "Save image",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'accepted', message: $('Verification gate').item.json.message, file: $('Verification gate').item.json.file_name }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "e0638604-9c76-4028-ad56-70712b1bdebc",
+      "name": "Respond 200 accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'rejected', reasons: $json.reasons }) }}",
+        "options": {
+          "responseCode": 422
+        }
+      },
+      "id": "28694a47-f3ff-4b4d-b44a-e821fb763096",
+      "name": "Respond 422 rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        120
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verification gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verification gate": {
+      "main": [
+        [
+          {
+            "node": "Verified?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verified?": {
+      "main": [
+        [
+          {
+            "node": "Save image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 422 rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save image": {
+      "main": [
+        [
+          {
+            "node": "Respond 200 accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

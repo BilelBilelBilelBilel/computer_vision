@@ -1,0 +1,23 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+ultralytics = ">=8.3.0"
+opencv-python = "*"
+supervision = "<0.31,>=0.30"
+fastapi = "*"
+uvicorn = "*"
+httpx = "*"
+numpy = "*"
+matplotlib = "*"
+onnxruntime = "*"
+onnx = "*"
+pandas = "*"
+streamlit = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.13"

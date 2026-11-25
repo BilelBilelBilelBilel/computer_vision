@@ -1,0 +1,17 @@
+﻿# Python & virtual environments
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Model weights
+*.pt
+*.onnx
+
+# Outputs & local secrets
+output/
+.env
+.env.*
